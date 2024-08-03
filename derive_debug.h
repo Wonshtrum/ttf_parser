@@ -59,8 +59,8 @@
 
 #define NAME(N)	SET_FMT_INLINE(N, false)				\
 	void debug_fmt_ ## N (N* this, int fmt);			\
-	TOGGLE_H_IMPL(void debug_ ## N (N* this), { debug_fmt_ ## N (this, FMT); })\
-	TOGGLE_H_IMPL(void debug_fmt_ ## N (N* this, int fmt), {	\
+	void debug_ ## N (N* this) TOGGLE_H_IMPL({ debug_fmt_ ## N (this, FMT); })\
+	void debug_fmt_ ## N (N* this, int fmt) TOGGLE_H_IMPL({		\
 		int has_nl = fmt & FMT_NL;				\
 		int has_fnl = fmt & FMT_FNL;				\
 		int has_names = fmt & FMT_NAMES;			\
@@ -72,11 +72,10 @@
 		else							\
 			printf("{%c", sep);)
 
-#ifdef H_IMPL
 #define PTR(T) ptr
 #define ARR(T, X) T, 1, X
 #define FIELD_RAW(X)
-#define FIELD(T, N) _FIELD(N, T, 0, 1)
+#define FIELD(T, N) TOGGLE_H_IMPL(_FIELD(N, T, 0, 1))
 #define _FIELD(N, T, IS_ARR, DIM, ...)					\
 	if (has_names)							\
 		printf("%*s" #N ": ", TAB_WIDTH*tabs, "");		\
@@ -87,14 +86,7 @@
 			debug_fmt_ ## T(&this->N, FMT_NEXT(fmt)));	\
 	printf(",%c", sep);
 
-CLASS printf("%*s}", TAB_WIDTH*ftabs, ""); if (has_fnl) printf("\n"); }
-#else
-#define PTR(T)
-#define ARR(T, X)
-#define FIELD_RAW(X)
-#define FIELD(T, N)
-CLASS
-#endif
+CLASS TOGGLE_H_IMPL(printf("%*s}", TAB_WIDTH*ftabs, ""); if (has_fnl) printf("\n"); })
 
 #undef NAME
 #undef PTR

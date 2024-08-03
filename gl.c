@@ -4,7 +4,9 @@
 #include "types.h"
 #include "maracas.h"
 
+#define H_IMPL
 #include "shader.h"
+#include "ttf.h"
 
 void error_callback(int error, const char* description) {
 	MRC_ERROR("GLFW(%d): %s", error, description);
@@ -49,9 +51,11 @@ int main() {
 "    color = vec4(1);\n"
 "}");
 
-	//const char* FILE_NAME = "DejaVuSans.ttf";
+	const char* FILE_NAME = "DejaVuSans.ttf";
 	//const char* FILE_NAME = "Alkia.ttf";
-	//Glyph glyph = read_Font(FILE_NAME);
+	Glyph glyph = read_Font(FILE_NAME);
+	(void)glyph;
+	//debug_Glyph(&glyph);
 
 	while (!glfwWindowShouldClose(window)) {
 		glClear(GL_COLOR_BUFFER_BIT);

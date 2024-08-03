@@ -3,8 +3,15 @@
 
 #include "maracas.h"
 #include "types.h"
+#include "macros.h"
 
-#define H_IMPL
+u32 label_to_int(const char label[4]) TOGGLE_H_IMPL({
+	return *(u32*)label;
+})
+
+bool cmp_labels(const char a[4], const char b[4]) TOGGLE_H_IMPL({
+	return *(u32*)a == *(u32*)b;
+})
 
 #define CLASS NAME(Slice)	\
 	FIELD(PTR(u8), ptr)	\
@@ -20,29 +27,25 @@
 #include "derive_debug.h"
 #undef CLASS
 
-u32 label_to_int(const char label[4]) {
-	return *(u32*)label;
-}
-bool cmp_labels(const char a[4], const char b[4]) {
-	return *(u32*)a == *(u32*)b;
-}
-
-void read_into(Reader* rd, u8* buffer, u32 len) {
+void read_into(Reader* rd, u8* buffer, u32 len) TOGGLE_H_IMPL({
 	memcpy(buffer, rd->cursor, len);
 	rd->cursor += len;
-}
-Slice read_str(Reader* rd, u32 len) {
+})
+
+Slice read_str(Reader* rd, u32 len) TOGGLE_H_IMPL({
 	rd->cursor += len;
 	return (Slice) {
 		.ptr = rd->cursor,
 		.len = len,
 	};
-}
-char read_char(Reader* rd) {
-	return *rd->cursor++;
-}
+})
 
-#define X(_, T, N) T read_ ## T(Reader* rd) {	\
+char read_char(Reader* rd) TOGGLE_H_IMPL({
+	return *rd->cursor++;
+})
+
+#define X(_, T, N) T read_ ## T(Reader* rd)	\
+TOGGLE_H_IMPL({					\
 	u8* buf = rd->cursor;			\
 	rd->cursor += N;			\
 	T res = 0;				\
@@ -50,59 +53,10 @@ char read_char(Reader* rd) {
 		res |= buf[i] << 8*(N-i-1);	\
 	}					\
 	return res;				\
-}
+})
 FOR_ALL_UINTS
 FOR_ALL_INTS
 #undef X
-
-Slice read_file(const char* path) {
-	Slice ret = (Slice) {
-		.ptr = NULL,
-		.len = 0,
-	};
-	u8* buffer = NULL;
-
-	FILE* file = fopen(path, "rb");
-	if (!file) {
-		MRC_ERROR("Could not open '%s': %s", path, strerror(errno));
-		goto defer;
-	}
-
-	if (fseek(file, 0, SEEK_END)) {
-		MRC_ERROR("Could not seek end");
-		goto defer;
-	}
-
-	int file_size = ftell(file);
-	if (fseek(file, 0, SEEK_SET)) {
-		MRC_ERROR("Could not seek start");
-		goto defer;
-	}
-
-	buffer = (u8*)malloc(file_size+1);
-	if (!buffer) {
-		MRC_ERROR("Could not allocate buffer to read file");
-		goto defer;
-	}
-
-	int read_amount = fread(buffer, 1, file_size, file);
-	if (read_amount != file_size) {
-		MRC_ERROR("File size and bytes read differs: %d != %d", file_size, read_amount);
-		goto defer;
-	}
-
-	buffer[read_amount] = '\0';
-	ret.ptr = buffer;
-	ret.len = file_size+1;
-	fclose(file);
-	MRC_INFO("Read %d bytes from '%s'", file_size, path);
-	return ret;
-
-defer:
-	if (file) fclose(file);
-	if (buffer) free(buffer);
-	return ret;
-}
 
 #define CLASS NAME(FontHeader)		\
 	FIELD(u32, scaler)		\
@@ -159,15 +113,64 @@ defer:
 #include "derive_debug.h"
 #undef CLASS
 
-void debug_ivec2(ivec2* this) {
+void debug_ivec2(ivec2* this) TOGGLE_H_IMPL({
 	printf("(%d, %d)", this->x, this->y);
-}
+})
 DERIVE_FMT(ivec2)
 SET_FMT_INLINE(ivec2, true);
 
 
-int main() {	
-	char* path = "DejaVuSans.ttf";
+Slice read_file(const char* path) TOGGLE_H_IMPL({
+	Slice ret = (Slice) {
+		.ptr = NULL,
+		.len = 0,
+	};
+	u8* buffer = NULL;
+
+	FILE* file = fopen(path, "rb");
+	if (!file) {
+		MRC_ERROR("Could not open '%s': %s", path, strerror(errno));
+		goto defer;
+	}
+
+	if (fseek(file, 0, SEEK_END)) {
+		MRC_ERROR("Could not seek end");
+		goto defer;
+	}
+
+	int file_size = ftell(file);
+	if (fseek(file, 0, SEEK_SET)) {
+		MRC_ERROR("Could not seek start");
+		goto defer;
+	}
+
+	buffer = (u8*)malloc(file_size+1);
+	if (!buffer) {
+		MRC_ERROR("Could not allocate buffer to read file");
+		goto defer;
+	}
+
+	int read_amount = fread(buffer, 1, file_size, file);
+	if (read_amount != file_size) {
+		MRC_ERROR("File size and bytes read differs: %d != %d", file_size, read_amount);
+		goto defer;
+	}
+
+	buffer[read_amount] = '\0';
+	ret.ptr = buffer;
+	ret.len = file_size+1;
+	fclose(file);
+	MRC_INFO("Read %d bytes from '%s'", file_size, path);
+	return ret;
+
+defer:
+	if (file) fclose(file);
+	if (buffer) free(buffer);
+	return ret;
+})
+
+
+Glyph read_Font(const char* path) TOGGLE_H_IMPL({
 	Slice content = read_file(path);
 	if (!content.ptr) {
 		MRC_ABORT("An error occured while reading '%s', aborting", path);
@@ -257,5 +260,5 @@ int main() {
 		.points = points,
 		.contours = contours,
 	};
-	//return glyph;
-}
+	return glyph;
+})
