@@ -8,7 +8,7 @@
 #define FMT_NEXT(fmt) (((fmt)+1) & ~FMT_FNL)
 #define FMT FMT_NAMES | FMT_NL | FMT_FNL | FMT_INLINE
 
-#define debug_bool(x) printf(x ? "true" : "false")
+#define debug_bool(x) printf(*x ? "true" : "false")
 #define debug_fmt_bool(x, _) debug_bool(x)
 #define debug_char(x) printf("%c", *x)
 #define debug_fmt_char(x, _) debug_char(x)

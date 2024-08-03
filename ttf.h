@@ -84,11 +84,16 @@ FOR_ALL_INTS
 	FIELD(i32, y)
 #include "define_class.h"
 #undef CLASS
+void debug_ivec2(ivec2* this) TOGGLE_H_IMPL({
+	printf("(%d, %d)", this->x, this->y);
+})
+DERIVE_FMT(ivec2)
+SET_FMT_INLINE(ivec2, true);
 
 #define CLASS NAME(Point)	\
-	FIELD(i32, x)		\
-	FIELD(i32, y)		\
-	FIELD(bool, on_curve)
+	FIELD(i16, x)		\
+	FIELD(i16, y)		\
+	FIELD(bool, is_end)
 #include "define_class.h"
 #include "derive_debug.h"
 #undef CLASS
@@ -112,12 +117,6 @@ FOR_ALL_INTS
 #include "define_class.h"
 #include "derive_debug.h"
 #undef CLASS
-
-void debug_ivec2(ivec2* this) TOGGLE_H_IMPL({
-	printf("(%d, %d)", this->x, this->y);
-})
-DERIVE_FMT(ivec2)
-SET_FMT_INLINE(ivec2, true);
 
 
 Slice read_file(const char* path) TOGGLE_H_IMPL({
@@ -170,7 +169,7 @@ defer:
 })
 
 
-Glyph read_Font(const char* path) TOGGLE_H_IMPL({
+Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
 	Slice content = read_file(path);
 	if (!content.ptr) {
 		MRC_ABORT("An error occured while reading '%s', aborting", path);
@@ -199,24 +198,26 @@ Glyph read_Font(const char* path) TOGGLE_H_IMPL({
 		MRC_ABORT("Could not find 'glyf' table in '%s', aborting", path);
 	}
 
+	Glyph glyph;
+	for (int c=0; c<=glyph_index; c++) {
 	GlyphHeader header = read_GlyphHeader(&glyf_rd);
 	debug_GlyphHeader(&header);
 
-	u16* contours = malloc(header.n_contours*sizeof(u16));
+	u16 n_contours = header.n_contours;
+	u16* contours = malloc((n_contours+1)*sizeof(u16));
 	u16 n_points = 0;
-	for (int i=0; i<header.n_contours; i++) {
+	for (int i=0; i<n_contours; i++) {
 		u16 end_point = read_u16(&glyf_rd);
 		contours[i] = end_point;
 		n_points = end_point+1;
 	}
-	debug_array(u16, header.n_contours, contours);
+	debug_array(u16, n_contours, contours);
 
 	u16 n_instructions = read_u16(&glyf_rd);
 	MRC_DEBUG("n_instructions: %d", n_instructions);
 	glyf_rd.cursor += n_instructions;
 
 	u8* flags = malloc(n_points);
-	Point* points = malloc(n_points*sizeof(Point));
 	for (int i=0; i<n_points; i++) {
 		u8 flag = read_u8(&glyf_rd);
 		u8 n_repeat = 0;
@@ -225,13 +226,15 @@ Glyph read_Font(const char* path) TOGGLE_H_IMPL({
 		}
 		for (int j=0; j<=n_repeat; j++) {
 			flags[i+j] = flag;
-			points[i+j].on_curve = flag & 1;
+			//points[i+j].on_curve = flag & 1;
 		}
 	}
 	debug_array(u8, n_points, flags);
 
+	Point* points = malloc((n_points+n_contours)*sizeof(Point));
 	i16 v = 0;
 	for (int j=0; j<2; j++) {
+		int contour = 0;
 		for (int i=0; i<n_points; i++) {
 			if (flags[i] & 1<<(1+j)) {
 				u8 offset = read_u8(&glyf_rd);
@@ -245,20 +248,29 @@ Glyph read_Font(const char* path) TOGGLE_H_IMPL({
 				v += offset;
 			}
 			if (j == 0) {
-				points[i].x = v;
+				points[i+contour].x = v;
 			} else {
-				points[i].y = v;
+				points[i+contour].y = v;
+			}
+			points[i+contour].is_end = 1;
+			if (i >= contours[contour]) {
+				contour++;
+				if (j == 1) {
+					points[i+contour] = contour-1 ? points[contours[contour-2]+contour] : points[0];
+					points[i+contour].is_end = 0;
+				}
 			}
 		}
 	}
 	free(flags);
-	debug_array(Point, n_points, points);
+	debug_array(Point, n_points+n_contours, points);
 
-	Glyph glyph = (Glyph) {
+	glyph = (Glyph) {
 		.header = header,
-		.n_points = n_points,
+		.n_points = n_points+n_contours,
 		.points = points,
 		.contours = contours,
 	};
+	}
 	return glyph;
 })

@@ -55,6 +55,6 @@ u32 new_shader(const char* name, const char* vs_src, const char* fs_src) TOGGLE_
 		glDeleteProgram(id);
 		MRC_ERROR("Failed to validate shader %s:\n%s", name, message);
 	}
-	MRC_INFO("Successfully compiled shader %s", name);
+	MRC_INFO("Successfully compiled shader %s with id %d", name, id);
 	return id;
 })
