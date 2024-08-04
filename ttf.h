@@ -111,9 +111,8 @@ SET_FMT_INLINE(ivec2, true);
 
 #define CLASS NAME(Glyph)		\
 	FIELD(GlyphHeader, header)	\
-	FIELD(u16, n_points)		\
-	FIELD(PTR(Point), points)	\
-	FIELD(PTR(u16), contours)
+	FIELD(VEC(Point), points)	\
+	FIELD(VEC(u16), contours)
 #include "define_class.h"
 #include "derive_debug.h"
 #undef CLASS
@@ -204,20 +203,21 @@ Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
 	debug_GlyphHeader(&header);
 
 	u16 n_contours = header.n_contours;
-	u16* contours = malloc((n_contours+1)*sizeof(u16));
+	u16* contours = vector_new(u16, n_contours);
 	u16 n_points = 0;
 	for (int i=0; i<n_contours; i++) {
 		u16 end_point = read_u16(&glyf_rd);
 		contours[i] = end_point;
 		n_points = end_point+1;
 	}
-	debug_array(u16, n_contours, contours);
+	vector_len(contours) = n_contours;
+	debug_vector(u16, contours);
 
 	u16 n_instructions = read_u16(&glyf_rd);
 	MRC_DEBUG("n_instructions: %d", n_instructions);
 	glyf_rd.cursor += n_instructions;
 
-	u8* flags = malloc(n_points);
+	u8* flags = vector_new(u8, n_points);
 	for (int i=0; i<n_points; i++) {
 		u8 flag = read_u8(&glyf_rd);
 		u8 n_repeat = 0;
@@ -229,9 +229,10 @@ Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
 			//points[i+j].on_curve = flag & 1;
 		}
 	}
-	debug_array(u8, n_points, flags);
+	vector_len(flags) = n_points;
+	debug_vector(u8, flags);
 
-	Point* points = malloc((n_points+n_contours)*sizeof(Point));
+	Point* points = vector_new(Point, n_points+n_contours);
 	i16 v = 0;
 	for (int j=0; j<2; j++) {
 		int contour = 0;
@@ -262,12 +263,12 @@ Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
 			}
 		}
 	}
-	free(flags);
-	debug_array(Point, n_points+n_contours, points);
+	vector_free(flags);
+	vector_len(points) = n_points+n_contours;
+	debug_vector(Point, points);
 
 	glyph = (Glyph) {
 		.header = header,
-		.n_points = n_points+n_contours,
 		.points = points,
 		.contours = contours,
 	};

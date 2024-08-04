@@ -82,17 +82,18 @@ int main() {
 	const char* FILE_NAME = "DejaVuSans.ttf";
 	//const char* FILE_NAME = "Alkia.ttf";
 	Glyph glyph = read_Font(FILE_NAME, 1);
-	glBufferData(GL_ARRAY_BUFFER, glyph.n_points*sizeof(Point), glyph.points, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vector_size(glyph.points), glyph.points, GL_STATIC_DRAW);
 
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
 	while (!glfwWindowShouldClose(window)) {
 		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, glyph.n_points-1);
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, vector_len(glyph.points)-1);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
+	free_Glyph(&glyph);
 
 	printf("good bye!\n");
 }

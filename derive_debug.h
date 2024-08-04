@@ -12,6 +12,8 @@
 #define debug_fmt_bool(x, _) debug_bool(x)
 #define debug_char(x) printf("%c", *x)
 #define debug_fmt_char(x, _) debug_char(x)
+#define debug_ptr(x) printf("%p", *x)
+#define debug_fmt_ptr(x, _) debug_ptr(x)
 
 #define debug_u8(x) printf("%d", *x)
 #define debug_fmt_u8(x, _) debug_u8(x)
@@ -31,7 +33,10 @@
 #define debug_i64(x) printf("%d", *x)
 #define debug_fmt_i64(x, _) debug_i64(x)
 
+#define INLINE_bool 1
 #define INLINE_char 1
+#define INLINE_ptr 1
+
 #define INLINE_u8 1
 #define INLINE_u16 1
 #define INLINE_u32 1
@@ -41,12 +46,10 @@
 #define INLINE_i32 1
 #define INLINE_i64 1
 
-#define debug_ptr(x) printf("%p", *x)
-#define debug_fmt_ptr(x, _) debug_ptr(x)
 #define debug_fmt_array(T, DIM, x, fmt)	{				\
 	int has_nl = ((fmt) & FMT_NL) && (!INLINE_ ## T || !((fmt) & FMT_INLINE));\
 	int has_fnl = (fmt) & FMT_FNL;					\
-	int tabs = has_nl ? ((fmt)+1) & 0xF : 0;				\
+	int tabs = has_nl ? ((fmt)+1) & 0xF : 0;			\
 	int ftabs = has_nl ? (fmt) & 0xF : 0;				\
 	char sep = has_nl ? '\n' : ' ';					\
 	printf("[%c", sep);						\
@@ -56,6 +59,13 @@
 		printf(",%c", sep);					\
 	} printf("%*s]", TAB_WIDTH*ftabs, ""); if (has_fnl) printf("\n"); }
 #define debug_array(T, DIM, x) debug_fmt_array(T, DIM, x, FMT)
+
+#define debug_fmt_vector(T, x, fmt) {					\
+	int length = ((VecHeader*)x)[-1].len;				\
+	if ((fmt) & FMT_NAMES)						\
+		printf("vec(%d, %d)", vector_len(x), vector_cap(x));	\
+	debug_fmt_array(T, length, x, fmt);}
+#define debug_vector(T, x) debug_fmt_vector(T, x, FMT)
 
 #define NAME(N)	SET_FMT_INLINE(N, false)				\
 	void debug_fmt_ ## N (N* this, int fmt);			\
@@ -73,23 +83,28 @@
 			printf("{%c", sep);)
 
 #define PTR(T) ptr
-#define ARR(T, X) T, 1, X
+#define VEC(T) T, VECTOR, ?
+#define ARR(T, X) T, ARRAY, X
 #define FIELD_RAW(X)
-#define FIELD(T, N) TOGGLE_H_IMPL(_FIELD(N, T, 0, 1))
-#define _FIELD(N, T, IS_ARR, DIM, ...)					\
+#define FIELD(T, N) TOGGLE_H_IMPL(_FIELD(N, T, SCALAR, 1))
+#define _FIELD(N, T, CONTAINER, DIM, ...)				\
 	if (has_names)							\
 		printf("%*s" #N ": ", TAB_WIDTH*tabs, "");		\
 	else								\
 		printf("%*s", TAB_WIDTH*tabs, "");			\
-	IF ## IS_ARR(							\
-			debug_fmt_array(T, DIM, this->N, FMT_NEXT(fmt)),\
-			debug_fmt_ ## T(&this->N, FMT_NEXT(fmt)));	\
+	IF ## CONTAINER ## IS ## SCALAR (				\
+		debug_fmt_ ## T(&this->N, FMT_NEXT(fmt)));		\
+	IF ## CONTAINER ## IS ## ARRAY (				\
+		debug_fmt_array(T, DIM, this->N, FMT_NEXT(fmt)));	\
+	IF ## CONTAINER ## IS ## VECTOR (				\
+		debug_fmt_vector(T, this->N, FMT_NEXT(fmt)));		\
 	printf(",%c", sep);
 
 CLASS TOGGLE_H_IMPL(printf("%*s}", TAB_WIDTH*ftabs, ""); if (has_fnl) printf("\n"); })
 
 #undef NAME
 #undef PTR
+#undef VEC
 #undef ARR
 #undef FIELD_RAW
 #undef FIELD

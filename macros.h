@@ -1,5 +1,16 @@
-#define IF0(THEN, ELSE) ELSE
-#define IF1(THEN, ELSE) THEN
+#include "types.h"
+
+#define IFSCALARISSCALAR(THEN, ...) THEN
+#define IFSCALARISARRAY(THEN, ...) __VA_ARGS__
+#define IFSCALARISVECTOR(THEN, ...) __VA_ARGS__
+
+#define IFARRAYISSCALAR(THEN, ...) __VA_ARGS__
+#define IFARRAYISARRAY(THEN, ...) THEN
+#define IFARRAYISVECTOR(THEN, ...) __VA_ARGS__
+
+#define IFVECTORISSCALAR(THEN, ...) __VA_ARGS__
+#define IFVECTORISARRAY(THEN, ...) __VA_ARGS__
+#define IFVECTORISVECTOR(THEN, ...) THEN
 
 #define IGNORE_UNUSED(N) void __ ## N() { (void) N;  }
 
