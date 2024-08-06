@@ -27,6 +27,21 @@ bool cmp_labels(const char a[4], const char b[4]) TOGGLE_H_IMPL({
 #include "derive_debug.h"
 #undef CLASS
 
+Reader Reader_from_Slice(Slice content) {
+	return (Reader) {
+		.content = content,
+		.cursor = content.ptr,
+	};
+}
+Reader Reader_from_Vec(u8* content) {
+	return (Reader) {
+		.content = (Slice) {
+			.ptr = content,
+			.len = vector_len(content),
+		},
+		.cursor = content,
+	};
+}
 Reader window_Reader(Reader* rd, u32 offset, u32 len) TOGGLE_H_IMPL({
 	Reader new_rd;
 	new_rd.content.ptr = new_rd.cursor = rd->content.ptr + offset;
@@ -203,9 +218,11 @@ SET_FMT_INLINE(Fixed, true)
 	FIELD(HeadTable, head)		\
 	FIELD(MaxpTable, maxp)		\
 	FIELD(CmapTable, cmap)		\
-	FIELD(VEC(u8), glyph_data)
+	FIELD(VEC(u32), loca)		\
+	FIELD(VEC(u8), glyf)
 #include "define_class.h"
 #include "derive_debug.h"
+#undef CLASS
 
 
 Slice read_file(const char* path) TOGGLE_H_IMPL({
@@ -331,18 +348,17 @@ CmapTable read_CmapTable(Reader* rd) TOGGLE_H_IMPL({
 		for (int i=0; i<n_groups; i++) {
 			u16 id_range_offset = read_u16(rd);
 			if (id_range_offset) {
-				MRC_ERROR("%d %d", id_range_offset/2, i-n_groups+id_range_offset/2);
+				u16 range = groups[i].end - groups[i].start;
 				u16 offset = i - n_groups + id_range_offset/2;
 				AS(Fixed, groups[i].code).b = offset;
-				if (offset+groups[i].end-groups[i].start > max_offset) {
-					max_offset = offset+groups[i].end-groups[i].start;
+				if (range+offset > max_offset) {
+					max_offset = range+offset;
 				}
 			} else {
 				AS(Fixed, groups[i].code).b = 0;
 			}
 		}
-		//debug_fmt_vector(CmapGroup, groups, FMT & ~FMT_CAP);
-		MRC_ERROR("max_offset: %d", max_offset);
+		MRC_DEBUG("max_offset: %d", max_offset);
 		u16* glyph_index_array = vector_new(u16, max_offset);
 		vector_len(glyph_index_array) = max_offset;
 		for (int i=0; i<max_offset; i++) {
@@ -382,8 +398,80 @@ CmapTable read_CmapTable(Reader* rd) TOGGLE_H_IMPL({
 	}}
 })
 
-u32 get_glyph_location(u32 c, CmapTable* cmap, u32* locations) {
-	MRC_WARN("Searching for %c: %d", c, c);
+Font read_Font(const char* path) TOGGLE_H_IMPL({
+	Slice content = read_file(path);
+	if (!content.ptr) {
+		MRC_ABORT("An error occured while opening '%s', aborting", path);
+	}
+	Reader rd = Reader_from_Slice(content);
+
+	FontHeader header = read_FontHeader(&rd);
+	debug_FontHeader(&header);
+
+	Reader glyf_rd = { 0 };
+	Reader head_rd = { 0 };
+	Reader cmap_rd = { 0 };
+	Reader maxp_rd = { 0 };
+	Reader loca_rd = { 0 };
+	for (int i=0; i<header.n_tables; i++) {
+		DirectoryEntry entry = read_DirectoryEntry(&rd);
+		debug_fmt_DirectoryEntry(&entry, FMT_NAMES | FMT_FNL);
+		Reader entry_rd = window_Reader(&rd, entry.offset, entry.length);
+		if (cmp_labels(entry.tag, "head")) {
+			MRC_INFO("Found head table");
+			head_rd = entry_rd;
+		}
+		if (cmp_labels(entry.tag, "maxp")) {
+			MRC_INFO("Found maxp table");
+			maxp_rd = entry_rd;
+		}
+		if (cmp_labels(entry.tag, "cmap")) {
+			MRC_INFO("Found cmap table");
+			cmap_rd = entry_rd;
+		}
+		if (cmp_labels(entry.tag, "loca")) {
+			MRC_INFO("Found loca table");
+			loca_rd = entry_rd;
+		}
+		if (cmp_labels(entry.tag, "glyf")) {
+			MRC_INFO("Found glyf table");
+			glyf_rd = entry_rd;
+		}
+	}
+	MRC_ASSERT(head_rd.cursor, "Missing head table");
+	MRC_ASSERT(maxp_rd.cursor, "Missing maxp table");
+	MRC_ASSERT(cmap_rd.cursor, "Missing cmap table");
+	MRC_ASSERT(loca_rd.cursor, "Missing loca table");
+	MRC_ASSERT(glyf_rd.cursor, "Missing glyf table");
+
+	HeadTable head = read_HeadTable(&head_rd);
+	MaxpTable maxp = read_MaxpTable(&maxp_rd);
+	CmapTable cmap = read_CmapTable(&cmap_rd);
+	u32* loca = read_LocaTable(&loca_rd, maxp.n_glyphs, head.loca_format);
+
+	if (!cmap.groups) {
+		MRC_ABORT("An error occured while parsing the cmap table, aborting");
+	}
+	if (!loca) {
+		MRC_ABORT("An error occured while parsing the loca table, aborting");
+	}
+
+	int glyf_len = glyf_rd.content.len;
+	u8* glyf = vector_new(u8, glyf_len);
+	vector_len(glyf) = glyf_len;
+	read_into(&glyf_rd, glyf, glyf_len);
+
+	return (Font) {
+		.header = header,
+		.head = head,
+		.maxp = maxp,
+		.cmap = cmap,
+		.loca = loca,
+		.glyf = glyf,
+	};
+})
+
+u32 get_location(u32 c, CmapTable* cmap, u32* locations) TOGGLE_H_IMPL({
 	CmapGroup* groups = cmap->groups;
 	int length = vector_len(groups);
 	for (int i=0; i<length; i++) {
@@ -395,9 +483,7 @@ u32 get_glyph_location(u32 c, CmapTable* cmap, u32* locations) {
 			case 4:
 				u16 id_delta = AS(Fixed, groups[i].code).a;
 				u16 id_range_offset = AS(Fixed, groups[i].code).b;
-				MRC_DEBUG("%d %d %d", id_range_offset, id_delta, vector_len(locations));
 				if (id_range_offset) {
-					MRC_WARN("%d %d", id_range_offset+offset, cmap->glyph_index_array[id_range_offset+offset]);
 					return locations[(cmap->glyph_index_array[id_range_offset + offset] + id_delta) & 0xFFFF];
 				} else {
 					return locations[(id_delta + c) & 0xFFFF];
@@ -411,109 +497,37 @@ u32 get_glyph_location(u32 c, CmapTable* cmap, u32* locations) {
 	}
 	MRC_DEBUG("No groups found for %d", c);
 	return 0;
-}
+})
 
-Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
-	Slice content = read_file(path);
-	if (!content.ptr) {
-		MRC_ABORT("An error occured while opening '%s', aborting", path);
-	}
-	Reader rd = (Reader) {
-		.content = content,
-		.cursor = content.ptr,
-	};
-
-	FontHeader font = read_FontHeader(&rd);
-	debug_FontHeader(&font);
-
-	Reader glyf_rd = { 0 };
-	Reader head_rd = { 0 };
-	Reader cmap_rd = { 0 };
-	Reader maxp_rd = { 0 };
-	Reader loca_rd = { 0 };
-	for (int i=0; i<font.n_tables; i++) {
-		DirectoryEntry entry = read_DirectoryEntry(&rd);
-		debug_fmt_DirectoryEntry(&entry, FMT_NAMES | FMT_FNL);
-		Reader entry_rd = window_Reader(&rd, entry.offset, entry.length);
-		if (cmp_labels(entry.tag, "glyf")) {
-			MRC_INFO("Found glyf table");
-			glyf_rd = entry_rd;
-		}
-		if (cmp_labels(entry.tag, "cmap")) {
-			MRC_INFO("Found cmap table");
-			cmap_rd = entry_rd;
-		}
-		if (cmp_labels(entry.tag, "head")) {
-			MRC_INFO("Found head table");
-			head_rd = entry_rd;
-		}
-		if (cmp_labels(entry.tag, "maxp")) {
-			MRC_INFO("Found maxp table");
-			maxp_rd = entry_rd;
-		}
-		if (cmp_labels(entry.tag, "loca")) {
-			MRC_INFO("Found loca table");
-			loca_rd = entry_rd;
-		}
-	}
-	MRC_ASSERT(glyf_rd.cursor, "Missing glyf table");
-	MRC_ASSERT(head_rd.cursor, "Missing head table");
-	MRC_ASSERT(cmap_rd.cursor, "Missing cmap table");
-	MRC_ASSERT(maxp_rd.cursor, "Missing maxp table");
-	MRC_ASSERT(loca_rd.cursor, "Missing loca table");
-
-	HeadTable head = read_HeadTable(&head_rd);
-	debug_HeadTable(&head);
-
-	MaxpTable maxp = read_MaxpTable(&maxp_rd);
-	debug_MaxpTable(&maxp);
-
-	CmapTable cmap = read_CmapTable(&cmap_rd);
-	if (!cmap.groups) {
-		MRC_ABORT("An error occured while parsing the character map, aborting");
-	}
-	debug_CmapTable(&cmap);
-
-	u32* locations = read_LocaTable(&loca_rd, maxp.n_glyphs, head.loca_format);
-	if (!locations) {
-		MRC_ABORT("An error occured while parsing the glyph locations, aborting");
-	}
-	debug_vector(u32, locations);
-
-	u32 loc = get_glyph_location('y', &cmap, locations);
+Glyph get_Glyph(Font* font, u32 c) TOGGLE_H_IMPL({
+	u32 loc = get_location(c, &font->cmap, font->loca);
 	MRC_DEBUG("Glyph location: %d", loc);
 
-	free_CmapTable(&cmap);
-	vector_free(locations);
-
-	glyf_rd.cursor += loc;
-
-	Glyph glyph;
-	GlyphHeader header = read_GlyphHeader(&glyf_rd);
-	debug_GlyphHeader(&header);
+	Reader rd = Reader_from_Vec(font->glyf);
+	rd.cursor += loc;
+	GlyphHeader header = read_GlyphHeader(&rd);
 
 	u16 n_contours = header.n_contours;
 	u16* contours = vector_new(u16, n_contours);
 	vector_len(contours) = n_contours;
 	u16 n_points = 0;
 	for (int i=0; i<n_contours; i++) {
-		u16 end_point = read_u16(&glyf_rd);
+		u16 end_point = read_u16(&rd);
 		contours[i] = end_point;
 		n_points = end_point+1;
 	}
-	debug_vector(u16, contours);
 
-	u16 n_instructions = read_u16(&glyf_rd);
+	u16 n_instructions = read_u16(&rd);
 	MRC_DEBUG("n_instructions: %d", n_instructions);
-	glyf_rd.cursor += n_instructions;
+	rd.cursor += n_instructions;
 
 	u8* flags = vector_new(u8, n_points);
 	vector_len(flags) = n_points;
 	for (int i=0; i<n_points;) {
-		u8 flag = read_u8(&glyf_rd);
+		u8 flag = read_u8(&rd);
 		u8 n_repeat = 1;
 		if (flag & 1<<3) {
-			n_repeat = 1+read_u8(&glyf_rd);
+			n_repeat = 1+read_u8(&rd);
 		}
 		for (int j=0; j<n_repeat; j++) {
 			flags[i+j] = flag;
@@ -530,14 +544,14 @@ Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
 		int contour = 0;
 		for (int i=0; i<n_points; i++) {
 			if (flags[i] & 1<<(1+j)) {
-				u8 offset = read_u8(&glyf_rd);
+				u8 offset = read_u8(&rd);
 				if (flags[i] & 1<<(4+j)) {
 					v += offset;
 				} else {
 					v -= offset;
 				}
 			} else if (!(flags[i] & 1<<(4+j))) {
-				i16 offset = read_i16(&glyf_rd);
+				i16 offset = read_i16(&rd);
 				v += offset;
 			}
 			if (j == 0) {
@@ -556,13 +570,10 @@ Glyph read_Font(const char* path, int glyph_index) TOGGLE_H_IMPL({
 		}
 	}
 	vector_free(flags);
-	//debug_fmt_vector(Point, points, FMT & ~FMT_CAP);
-	debug_vector(Point, points);
 
-	glyph = (Glyph) {
+	return (Glyph) {
 		.header = header,
 		.points = points,
 		.contours = contours,
 	};
-	return glyph;
 })

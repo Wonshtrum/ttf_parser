@@ -45,7 +45,7 @@ static inline void* __vector_alloc(void* _vector, u32 new_capacity, u32 size_of_
 	return vector+1;
 }
 #define vector_new(T, N) __vector_alloc(NULL, N, sizeof(T))
-#define vector_free(V) free(vector_ptr(V));
-#define vector_free_rec(T, V) { free_array(T, vector_len(V), V); vector_free(V); }
+#define vector_free(V) if (V) free(vector_ptr(V));
+#define vector_free_rec(T, V) { if (V) free_array(T, vector_len(V), V); vector_free(V); }
 
 #endif

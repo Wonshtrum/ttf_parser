@@ -12,7 +12,31 @@ void error_callback(int error, const char* description) {
 	MRC_ERROR("GLFW(%d): %s", error, description);
 }
 
+char CHAR = 0;
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	(void)scancode;
+	if (action == GLFW_PRESS) {
+		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+			glfwSetWindowShouldClose(window, GLFW_TRUE);
+			return;
+		}
+		char c = 0;
+		if (key >= 32 && key <= 126) {
+			if ((mods & 1) == 0 && key >= 'A' && key <= 'Z') {
+				c = key - 'A' + 'a';
+			} else {
+				c = key;
+			}
+		}
+		CHAR = c;
+	}
+}
+
 int main() {
+	//Font font = read_Font("DejaVuSans.ttf");
+	Font font = read_Font("vtks.ttf");
+	debug_Font(&font);
+
 	if (!glfwInit()) {
 		MRC_ABORT("GLFW: failed to initialize");
 	}
@@ -34,6 +58,8 @@ int main() {
 		MRC_ABORT("GLEW: failed to initialize");
 	}
 	MRC_INFO("GLEW: initialized");
+
+	glfwSetKeyCallback(window, key_callback);
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -79,22 +105,30 @@ int main() {
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(Point), (void*)(2*sizeof(i16)));
 	glVertexAttribDivisor(2, 1);
-	
-	//const char* FILE_NAME = "DejaVuSans.ttf";
-	//Glyph glyph = read_Font("DejaVuSans.ttf", 1);
-	Glyph glyph = read_Font("vtks.ttf", 1);
-	glBufferData(GL_ARRAY_BUFFER, vector_size(glyph.points), glyph.points, GL_STATIC_DRAW);
 
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
+	int n_points = 0;
+	char c = 0;
 	while (!glfwWindowShouldClose(window)) {
+		if (c != CHAR) {
+			c = CHAR;
+			Glyph glyph = get_Glyph(&font, c);
+			debug_Glyph(&glyph);
+			n_points = vector_len(glyph.points);
+			glBufferData(GL_ARRAY_BUFFER, vector_size(glyph.points), glyph.points, GL_STATIC_DRAW);
+			free_Glyph(&glyph);
+		}
+
 		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, vector_len(glyph.points)-1);
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, n_points-1);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
-	free_Glyph(&glyph);
 
+	glfwDestroyWindow(window);
+	glfwTerminate();
+	free_Font(&font);
 	printf("good bye!\n");
 }
