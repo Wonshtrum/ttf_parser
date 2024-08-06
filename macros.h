@@ -27,3 +27,5 @@
 #define DERIVE_DEFAULT_FMT(T) void debug_ ## T (T* this) TOGGLE_H_IMPL({ debug_fmt_ ## T(this, FMT); })
 #define DERIVE_FMT(T) void debug_fmt_ ## T (T* this, int fmt) TOGGLE_H_IMPL({ (void)fmt; debug_ ## T(this); })
 #define SET_FMT_INLINE(T, V) TOGGLE_H_IMPL(static bool INLINE_ ## T = V; IGNORE_UNUSED(INLINE_ ## T);)
+
+#define AS(T, X) (*(T*)&(X))
