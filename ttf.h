@@ -27,13 +27,13 @@ bool cmp_labels(const char a[4], const char b[4]) TOGGLE_H_IMPL({
 #include "derive_debug.h"
 #undef CLASS
 
-Reader Reader_from_Slice(Slice content) {
+Reader Reader_from_Slice(Slice content) TOGGLE_H_IMPL({
 	return (Reader) {
 		.content = content,
 		.cursor = content.ptr,
 	};
-}
-Reader Reader_from_Vec(u8* content) {
+})
+Reader Reader_from_Vec(u8* content) TOGGLE_H_IMPL({
 	return (Reader) {
 		.content = (Slice) {
 			.ptr = content,
@@ -41,7 +41,7 @@ Reader Reader_from_Vec(u8* content) {
 		},
 		.cursor = content,
 	};
-}
+})
 Reader window_Reader(Reader* rd, u32 offset, u32 len) TOGGLE_H_IMPL({
 	Reader new_rd;
 	new_rd.content.ptr = new_rd.cursor = rd->content.ptr + offset;
@@ -58,10 +58,10 @@ void read_into(Reader* rd, u8* buffer, u32 len) TOGGLE_H_IMPL({
 	rd->cursor += len;
 })
 
-Slice read_str(Reader* rd, u32 len) TOGGLE_H_IMPL({
+Slice read_Slice(Reader* rd, u32 len) TOGGLE_H_IMPL({
 	rd->cursor += len;
 	return (Slice) {
-		.ptr = rd->cursor,
+		.ptr = rd->cursor - len,
 		.len = len,
 	};
 })
@@ -499,6 +499,7 @@ u32 get_location(u32 c, CmapTable* cmap, u32* locations) TOGGLE_H_IMPL({
 	return 0;
 })
 
+#include "bytecode.h"
 Glyph get_Glyph(Font* font, u32 c) TOGGLE_H_IMPL({
 	u32 loc = get_location(c, &font->cmap, font->loca);
 	MRC_DEBUG("Glyph location: %d", loc);
@@ -519,7 +520,7 @@ Glyph get_Glyph(Font* font, u32 c) TOGGLE_H_IMPL({
 
 	u16 n_instructions = read_u16(&rd);
 	MRC_DEBUG("n_instructions: %d", n_instructions);
-	rd.cursor += n_instructions;
+	read_instructions(read_Slice(&rd, n_instructions));
 
 	u8* flags = vector_new(u8, n_points);
 	vector_len(flags) = n_points;
