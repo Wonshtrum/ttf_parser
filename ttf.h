@@ -189,7 +189,7 @@ SET_FMT_INLINE(Fixed, true)
 #define CLASS NAME(Point)	\
 	FIELD(i16, x)		\
 	FIELD(i16, y)		\
-	FIELD(bool, is_end)
+	FIELD(u8, flags)
 #include "define_class.h"
 #include "derive_debug.h"
 #undef CLASS
@@ -445,6 +445,7 @@ Font read_Font(const char* path) TOGGLE_H_IMPL({
 	MRC_ASSERT(glyf_rd.cursor, "Missing glyf table");
 
 	HeadTable head = read_HeadTable(&head_rd);
+	MRC_ASSERT(head.magic_number == 0x5f0f3cf5, "Wrong magic number: %x, aborting", head.magic_number);
 	MaxpTable maxp = read_MaxpTable(&maxp_rd);
 	CmapTable cmap = read_CmapTable(&cmap_rd);
 	u32* loca = read_LocaTable(&loca_rd, maxp.n_glyphs, head.loca_format);
@@ -461,6 +462,7 @@ Font read_Font(const char* path) TOGGLE_H_IMPL({
 	vector_len(glyf) = glyf_len;
 	read_into(&glyf_rd, glyf, glyf_len);
 
+	free(content.ptr);
 	return (Font) {
 		.header = header,
 		.head = head,
@@ -532,7 +534,6 @@ Glyph get_Glyph(Font* font, u32 c) TOGGLE_H_IMPL({
 		}
 		for (int j=0; j<n_repeat; j++) {
 			flags[i+j] = flag;
-			//points[i+j].on_curve = flag & 1;
 		}
 		i += n_repeat;
 	}
@@ -560,12 +561,12 @@ Glyph get_Glyph(Font* font, u32 c) TOGGLE_H_IMPL({
 			} else {
 				points[i+contour].y = v;
 			}
-			points[i+contour].is_end = 0;
+			points[i+contour].flags = flags[i] & 1;
 			if (i >= contours[contour]) {
 				contour++;
 				if (j == 1) {
 					points[i+contour] = contour-1 ? points[contours[contour-2]+contour] : points[0];
-					points[i+contour].is_end = 1;
+					points[i+contour].flags |= 2;
 				}
 			}
 		}

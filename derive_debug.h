@@ -51,7 +51,7 @@
 #define INLINE_i32 1
 #define INLINE_i64 1
 
-#define debug_fmt_array(T, DIM, x, fmt)	{				\
+#define debug_fmt_array(T, DIM, x, fmt)	STATEMENT(			\
 	int has_nl = ((fmt) & FMT_NL) && (!INLINE_ ## T || !((fmt) & FMT_INLINE));\
 	int has_fnl = (fmt) & FMT_FNL;					\
 	int cap = (fmt) & FMT_CAP ? INLINE_ ## T ? FMT_CAP_INLINE : FMT_CAP_COMPOUND : 0;\
@@ -65,14 +65,14 @@
 			{ printf("...%c", sep); break; }		\
 		debug_fmt_ ## T((x+i), FMT_NEXT(fmt));			\
 		printf(",%c", sep);					\
-	} printf("%*s]", FMT_TAB_WIDTH*ftabs, ""); if (has_fnl) printf("\n"); }
+	} printf("%*s]", FMT_TAB_WIDTH*ftabs, ""); if (has_fnl) printf("\n"); )
 #define debug_array(T, DIM, x) debug_fmt_array(T, DIM, x, FMT)
 
-#define debug_fmt_vector(T, x, fmt) if (!x) printf("vec(0)\n"); else {	\
+#define debug_fmt_vector(T, x, fmt) STATEMENT( if (!x) printf("vec(0)\n"); else {\
 	int length = ((VecHeader*)x)[-1].len;				\
 	if ((fmt) & FMT_NAMES)						\
 		printf("vec(%d, %d)", vector_len(x), vector_cap(x));	\
-	debug_fmt_array(T, length, x, fmt);}
+	debug_fmt_array(T, length, x, fmt);})
 #define debug_vector(T, x) debug_fmt_vector(T, x, FMT)
 
 #define NAME(N)	SET_FMT_INLINE(N, false)				\

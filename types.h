@@ -24,7 +24,7 @@ typedef u8 bool;
 #define true 1
 #define false 0
 
-#define free_array(T, DIM, x) for (typeof(DIM) i=0; i<DIM; i++) free_ ## T (x+i);
+#define free_array(T, DIM, x) for (typeof(DIM) i=0; i<DIM; i++) free_ ## T (x+i)
 
 typedef struct VecHeader {
 	u32 len;
@@ -46,6 +46,6 @@ static inline void* __vector_alloc(void* _vector, u32 new_capacity, u32 size_of_
 }
 #define vector_new(T, N) __vector_alloc(NULL, N, sizeof(T))
 #define vector_free(V) if (V) free(vector_ptr(V));
-#define vector_free_rec(T, V) { if (V) free_array(T, vector_len(V), V); vector_free(V); }
+#define vector_free_rec(T, V) STATEMENT( if (V) free_array(T, vector_len(V), V); vector_free(V); )
 
 #endif

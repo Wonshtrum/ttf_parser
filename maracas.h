@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define STATEMENT(...) do { __VA_ARGS__ } while(0)
+
 //CONFIG
 #define MRC_DEBUG_MOD
 #define MRC_OUTPUT stdout
@@ -41,9 +43,9 @@
 #define MRC_ERROR(...)		MRC_BASE(1, __VA_ARGS__, MRC_END_SEQ)
 #define MRC_CRITIC(...)		MRC_BASE(88, __VA_ARGS__, MRC_END_SEQ)
 
-#define MRC_ASSERT(x,...) 	{ if (!(x)) { MRC_CRITIC(MRC_ASSERT_PROMPT((x)) __VA_ARGS__); exit(-1); } }
-#define MRC_ASSERT_NOT(x,...) 	{ if (x) { MRC_CRITIC(MRC_ASSERT_PROMPT(!(x)) __VA_ARGS__); exit(-1); } }
-#define MRC_ABORT(...)		{ MRC_CRITIC(__VA_ARGS__); exit(-1); }
+#define MRC_ASSERT(x,...) 	STATEMENT( if (!(x)) { MRC_CRITIC(MRC_ASSERT_PROMPT((x)) __VA_ARGS__); exit(-1); } )
+#define MRC_ASSERT_NOT(x,...) 	STATEMENT( if (x) { MRC_CRITIC(MRC_ASSERT_PROMPT(!(x)) __VA_ARGS__); exit(-1); } )
+#define MRC_ABORT(...)		STATEMENT( MRC_CRITIC(__VA_ARGS__); exit(-1); )
 
 //DEBUG ONLY
 

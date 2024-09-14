@@ -32,9 +32,21 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	}
 }
 
-int main() {
-	//Font font = read_Font("DejaVuSans.ttf");
-	Font font = read_Font("vtks.ttf");
+u32* triangulate(Glyph* g) {
+	u32 end = g->contours[0];
+	Point* points = g->points;
+	for (int i=0; i<end; i++) {
+		points[i];
+	}
+}
+
+int main(int argc, char** argv) {
+	Font font;
+	if (argc > 1) {
+		font = read_Font(argv[1]);
+	} else {
+		font = read_Font("DejaVuSans.ttf");
+	}
 	debug_Font(&font);
 
 	if (!glfwInit()) {
@@ -63,29 +75,12 @@ int main() {
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-	u32 shader_test = new_shader("test",
-"layout (location = 0) in vec2 a_pos;\n"
-"layout (location = 1) in vec2 a_pos2;\n"
-"layout (location = 2) in float a_end;\n"
-"out vec4 v_color;"
-//"const vec2 foffsets[6] = vec2[](vec2(0, 0), vec2(1, 0), vec2(0, 1), vec2(1, 0), vec2(0, 1), vec2(1, 1));\n"
-"const vec2 foffsets[4] = vec2[](vec2(0, 0), vec2(1, 0), vec2(0, 1), vec2(1, 1));\n"
-"void main() {\n"
-"	vec2 d = a_pos - a_pos2;\n"
-"	vec2 s = normalize(vec2(d.y, -d.x))*0.003;\n"
-"	float z = 20;\n"
-"	vec2 offsets[4] = vec2[](z*a_pos-s, z*a_pos+s, z*a_pos2-s, z*a_pos2+s);\n"
-"	gl_Position = vec4(offsets[gl_VertexID], 0.0, 1.0);\n"
-//"	gl_Position = vec4(a_pos*12+foffsets[gl_VertexID]*0.05, 0.0, 1.0);\n"
-"	v_color = vec4(gl_InstanceID == 0, gl_VertexID<2, 1.0, 1.2-a_end);\n"
-//"	v_color = vec4(a_skip);\n"
-"}",
-"in vec4 v_color;\n"
-"out vec4 color;\n"
-"void main() {\n"
-"	color = v_color;\n"
-"}");
+	char* shader_src = (void*)read_file("test.glsl").ptr;
+	MRC_WARN("%s", shader_src);
+	u32 shader_test = new_shader("test", shader_src, shader_src);
+	free(shader_src);
 	glUseProgram(shader_test);
 
 	u32 va;
@@ -96,17 +91,15 @@ int main() {
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_SHORT, GL_TRUE, sizeof(Point), 0);
-	glVertexAttribDivisor(0, 1);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_SHORT, GL_TRUE, sizeof(Point), (void*)(sizeof(Point)));
-	glVertexAttribDivisor(1, 1);
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(Point), (void*)(2*sizeof(i16)));
-	glVertexAttribDivisor(2, 1);
-
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	for (int i=0; i<3; i++) {
+		size_t offset = i*sizeof(Point);
+		glEnableVertexAttribArray(i);
+		glVertexAttribPointer(i, 2, GL_SHORT, GL_TRUE, sizeof(Point), (void*)offset);
+		glVertexAttribDivisor(i, 1);
+		glEnableVertexAttribArray(i+3);
+		glVertexAttribPointer(i+3, 1, GL_BYTE, GL_FALSE, sizeof(Point), (void*)(offset+offsetof(Point, flags)));
+		glVertexAttribDivisor(i+3, 1);
+	}
 
 	int n_points = 0;
 	char c = 0;
